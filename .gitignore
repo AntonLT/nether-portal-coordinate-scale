@@ -24,4 +24,5 @@ run
 # Files from Forge MDK
 forge*changelog.txt
 
+# MacOS specific files
 .DS_Store
