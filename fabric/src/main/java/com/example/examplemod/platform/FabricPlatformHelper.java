@@ -1,5 +1,6 @@
 package com.example.examplemod.platform;
 
+import com.example.examplemod.config.Config;
 import com.example.examplemod.platform.services.IPlatformHelper;
 import net.fabricmc.loader.api.FabricLoader;
 
@@ -20,5 +21,10 @@ public class FabricPlatformHelper implements IPlatformHelper {
     public boolean isDevelopmentEnvironment() {
 
         return FabricLoader.getInstance().isDevelopmentEnvironment();
+    }
+
+    @Override
+    public double getConfigScale() {
+        return Config.getInstance().scale;
     }
 }

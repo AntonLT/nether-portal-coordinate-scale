@@ -1,5 +1,6 @@
 package com.example.examplemod.platform;
 
+import com.example.examplemod.config.Config;
 import com.example.examplemod.platform.services.IPlatformHelper;
 import net.neoforged.fml.ModList;
 import net.neoforged.fml.loading.FMLLoader;
@@ -22,5 +23,10 @@ public class NeoForgePlatformHelper implements IPlatformHelper {
     public boolean isDevelopmentEnvironment() {
 
         return !FMLLoader.isProduction();
+    }
+
+    @Override
+    public double getConfigScale() {
+        return Config.INSTANCE.SCALE.get();
     }
 }

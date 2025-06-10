@@ -25,6 +25,13 @@ public interface IPlatformHelper {
     boolean isDevelopmentEnvironment();
 
     /**
+     * Gets the scale configuration value.
+     *
+     * @return The scale value from config.
+     */
+    double getConfigScale();
+
+    /**
      * Gets the name of the environment type as a string.
      *
      * @return The name of the environment type.
