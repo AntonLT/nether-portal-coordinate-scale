@@ -255,141 +255,112 @@ org.gradle.jvmargs=-Xmx4G -XX:+UseParallelGC
 
 ---
 
-## 5. Auto-Upload to CurseForge and Modrinth
+## 5. Deployment Scripts for CurseForge and Modrinth
 
-### Task: Implement automated mod distribution
+### Task: Implement mod distribution via shell scripts
 
-**Status:** ✅ RESEARCH COMPLETE
+**Status:** ✅ COMPLETE
 
-### Recommended Solution: mc-publish GitHub Action
+### Solution: Shell Scripts for Local Control
 
-**Repository:** [Kir-Antipov/mc-publish](https://github.com/Kir-Antipov/mc-publish)
+Created flexible bash scripts for uploading releases to CurseForge and Modrinth with full local control over the deployment process.
 
-A versatile GitHub Action to streamline the publication of Minecraft projects. Supports Modrinth, CurseForge, and GitHub Releases with automatic value resolution.
+### Available Scripts
 
-### Key Features
+#### 1. `scripts/deploy-curseforge.sh`
+Deploy mod to CurseForge
 
-- ✅ Publish to Modrinth, CurseForge, and GitHub Releases
-- ✅ Automatic metadata detection from mod files (fabric.mod.json, neoforge.mods.toml)
-- ✅ Minimal configuration required
-- ✅ Support for NeoForge, Fabric, Forge, Quilt
-- ✅ Changelog support
-- ✅ Dependency handling
-- ✅ Game version filtering
+```bash
+./scripts/deploy-curseforge.sh <version> <changelog_file> <curseforge_token>
+```
 
-### Required Setup
+**Example:**
+```bash
+export CURSEFORGE_PROJECT_ID=123456
+./scripts/deploy-curseforge.sh 1.21.5 CHANGELOG.md your_token
+```
+
+#### 2. `scripts/deploy-modrinth.sh`
+Deploy mod to Modrinth
+
+```bash
+./scripts/deploy-modrinth.sh <version> <changelog_file> <modrinth_token>
+```
+
+**Example:**
+```bash
+export MODRINTH_PROJECT_ID=abcdef
+./scripts/deploy-modrinth.sh 1.21.5 CHANGELOG.md your_token
+```
+
+#### 3. `scripts/deploy-all.sh`
+Deploy to both CurseForge and Modrinth simultaneously
+
+```bash
+./scripts/deploy-all.sh <version> <changelog_file> <curseforge_token> <modrinth_token>
+```
+
+**Example:**
+```bash
+export CURSEFORGE_PROJECT_ID=123456
+export MODRINTH_PROJECT_ID=abcdef
+./scripts/deploy-all.sh 1.21.5 CHANGELOG.md cf_token modrinth_token
+```
+
+#### 4. `scripts/build-and-deploy.sh`
+Build the project and deploy to all platforms
+
+```bash
+./scripts/build-and-deploy.sh <changelog_file> <curseforge_token> <modrinth_token>
+```
+
+**Example:**
+```bash
+export CURSEFORGE_PROJECT_ID=123456
+export MODRINTH_PROJECT_ID=abcdef
+./scripts/build-and-deploy.sh CHANGELOG.md cf_token modrinth_token
+```
+
+### Setup Instructions
 
 #### 1. Create API Tokens
 
 **CurseForge:**
-
 - Go to: <https://authors.curseforge.com/account/api-tokens>
 - Create an API token
-- Add as GitHub Secret: `CURSEFORGE_TOKEN`
+- Save securely
 
 **Modrinth:**
-
 - Go to: <https://modrinth.com/settings/pats>
 - Create a Personal Access Token
-- Add as GitHub Secret: `MODRINTH_TOKEN`
+- Save securely
 
 #### 2. Get Project IDs
 
 **CurseForge:** Find in project URL or settings (numeric ID)
-**Modrinth:** Find in project URL (alphanumeric slug/ID)
+**Modrinth:** Find in project URL (alphanumeric slug)
 
-### Recommended GitHub Actions Workflow
+#### 3. Set Environment Variables
 
-Create `.github/workflows/release.yml`:
-
-```yaml
-name: Release
-
-on:
-  release:
-    types: [published]
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-      
-      - name: Setup Gradle
-        uses: gradle/gradle-build-action@v3
-      
-      - name: Build with Gradle
-        run: ./gradlew build
-      
-      - name: Publish (Fabric)
-        uses: Kir-Antipov/mc-publish@v3.3
-        with:
-          modrinth-id: YOUR_MODRINTH_ID
-          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
-          
-          curseforge-id: YOUR_CURSEFORGE_ID
-          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
-          
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          
-          files: fabric/build/libs/!(*-@(dev|sources|javadoc)).jar
-          
-          name: ""  # Let platforms determine name
-          version: ${{ github.ref_name }}
-          loaders: fabric
-          game-versions: |
-            1.21.5
-          
-      - name: Publish (NeoForge)
-        uses: Kir-Antipov/mc-publish@v3.3
-        with:
-          modrinth-id: YOUR_MODRINTH_ID
-          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
-          
-          curseforge-id: YOUR_CURSEFORGE_ID
-          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
-          
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          
-          files: neoforge/build/libs/!(*-@(dev|sources|javadoc)).jar
-          
-          name: ""
-          version: ${{ github.ref_name }}
-          loaders: neoforge
-          game-versions: |
-            1.21.5
+```bash
+export CURSEFORGE_PROJECT_ID=your_numeric_id
+export MODRINTH_PROJECT_ID=your_project_slug
 ```
-
-### Alternative: Gradle Plugin Approach
-
-For more control, consider using Gradle plugins:
-
-1. **Minotaur** (Modrinth): `com.modrinth.minotaur`
-2. **CurseForge Gradle** (CurseForge): `net.darkhax.curseforgegradle`
 
 ### Action Items
 
-- [x] Research CurseForge upload API ✅ (mc-publish handles it)
-- [x] Research Modrinth upload API ✅ (mc-publish handles it)
-- [x] Identify best automation approach ✅ (mc-publish GitHub Action)
+- [x] Research CurseForge upload API ✅
+- [x] Research Modrinth upload API ✅
+- [x] Create deployment scripts ✅
+- [x] Remove GitHub Actions workflow ✅
+- [x] Make scripts executable ✅
 - [ ] Create CurseForge project and get ID
 - [ ] Create Modrinth project and get ID
-- [ ] Set up GitHub Secrets (CURSEFORGE_TOKEN, MODRINTH_TOKEN)
-- [x] Create `.github/workflows/release.yml` ✅
-- [ ] Test workflow on a test release
-- [ ] Document release process
+- [ ] Test deployment scripts with real tokens
 
 ### Current Status
 
-✅ **GitHub Actions workflow created** at `.github/workflows/release.yml` on all branches.
+✅ **Deployment scripts created and ready to use**. All branches have the shell scripts in `/scripts` directory.
 
 ---
 
@@ -550,7 +521,7 @@ For each version, verify and update:
 | 2. Build Testing | ✅ Complete | All new versions build successfully |
 | 3. New Versions | ✅ Complete | 6 new versions created (1.21.6-1.21.11) |
 | 4. Build Optimization | ✅ Complete | Enabled daemon, parallel, cache - 90%+ improvement |
-| 5. Auto-Upload | ✅ Complete | GitHub Actions workflow created |
+| 5. Auto-Upload | ✅ Complete | Deployment shell scripts created (4 scripts) |
 | 6. Create New Versions | ✅ Complete | All 6 branches created and verified |
 
 ---
@@ -560,7 +531,7 @@ For each version, verify and update:
 - NeoForge appears to be the primary focus for recent versions
 - Multiple modloader support requires separate build configurations
 - Each version branch should maintain compatibility with its specific Minecraft version
-- GitHub Actions workflow created for automated releases
+- Shell scripts created for automated releases (deploy-curseforge.sh, deploy-modrinth.sh, deploy-all.sh, build-and-deploy.sh)
 - Use MultiLoader-Template branches as reference for dependency versions
 
 ---
