@@ -1,0 +1,177 @@
+name: Build and Publish
+
+on:
+  push:
+    tags:
+      - "v*.*.*" # Triggers on version tags like v1.0.0
+  workflow_dispatch: # Allows manual triggering
+    inputs:
+      version:
+        description: "Version to publish (optional, will use gradle.properties if not specified)"
+        required: false
+        type: string
+      changelog:
+        description: "Changelog content (optional, will use CHANGELOG.md if not specified)"
+        required: false
+        type: string
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+          cache: "gradle"
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build with Gradle
+        run: ./gradlew clean build
+
+      - name: Get version from gradle.properties
+        id: get_version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            VERSION=$(grep "^version=" gradle.properties | cut -d'=' -f2)
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Get Minecraft version
+        id: get_mc_version
+        run: |
+          MC_VERSION=$(grep "^minecraft_version=" gradle.properties | cut -d'=' -f2)
+          echo "mc_version=$MC_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Prepare changelog
+        id: changelog
+        run: |
+          if [ -n "${{ github.event.inputs.changelog }}" ]; then
+            echo "changelog<<EOF" >> $GITHUB_OUTPUT
+            echo "${{ github.event.inputs.changelog }}" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          elif [ -f "CHANGELOG.md" ]; then
+            echo "changelog<<EOF" >> $GITHUB_OUTPUT
+            cat CHANGELOG.md >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "changelog=Release ${{ steps.get_version.outputs.version }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Find JAR files
+        id: find_jars
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          FABRIC_JAR=$(find fabric/build/libs -name "*-${VERSION}.jar" ! -name "*-sources.jar" ! -name "*-javadoc.jar" ! -name "*-dev.jar" | head -1)
+          NEOFORGE_JAR=$(find neoforge/build/libs -name "*-${VERSION}.jar" ! -name "*-sources.jar" ! -name "*-javadoc.jar" ! -name "*-dev.jar" | head -1)
+
+          if [ -z "$FABRIC_JAR" ]; then
+            echo "Error: Fabric JAR not found"
+            exit 1
+          fi
+          if [ -z "$NEOFORGE_JAR" ]; then
+            echo "Error: NeoForge JAR not found"
+            exit 1
+          fi
+
+          echo "fabric_jar=$FABRIC_JAR" >> $GITHUB_OUTPUT
+          echo "neoforge_jar=$NEOFORGE_JAR" >> $GITHUB_OUTPUT
+
+          echo "Fabric JAR: $FABRIC_JAR"
+          echo "NeoForge JAR: $NEOFORGE_JAR"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mod-jars-${{ steps.get_version.outputs.version }}
+          path: |
+            ${{ steps.find_jars.outputs.fabric_jar }}
+            ${{ steps.find_jars.outputs.neoforge_jar }}
+
+      - name: Publish to CurseForge (Fabric)
+        if: env.CURSEFORGE_TOKEN != '' && env.CURSEFORGE_PROJECT_ID != ''
+        env:
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+          CURSEFORGE_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
+        run: |
+          curl -X POST "https://minecraft.curseforge.com/api/projects/$CURSEFORGE_PROJECT_ID/upload-file" \
+            -H "X-Api-Token: $CURSEFORGE_TOKEN" \
+            -F "metadata={
+              \"changelog\": $(jq -Rs . <<< '${{ steps.changelog.outputs.changelog }}'),
+              \"changelogType\": \"markdown\",
+              \"displayName\": \"Nether Portal Coordinate Scale ${{ steps.get_version.outputs.version }} (Fabric)\",
+              \"gameVersions\": [$(curl -s -H "X-Api-Token: $CURSEFORGE_TOKEN" "https://minecraft.curseforge.com/api/game/versions" | jq '.[] | select(.name == "${{ steps.get_mc_version.outputs.mc_version }}") | .id')],
+              \"releaseType\": \"release\"
+            }" \
+            -F "file=@${{ steps.find_jars.outputs.fabric_jar }}"
+
+      - name: Publish to CurseForge (NeoForge)
+        if: env.CURSEFORGE_TOKEN != '' && env.CURSEFORGE_PROJECT_ID != ''
+        env:
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+          CURSEFORGE_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
+        run: |
+          curl -X POST "https://minecraft.curseforge.com/api/projects/$CURSEFORGE_PROJECT_ID/upload-file" \
+            -H "X-Api-Token: $CURSEFORGE_TOKEN" \
+            -F "metadata={
+              \"changelog\": $(jq -Rs . <<< '${{ steps.changelog.outputs.changelog }}'),
+              \"changelogType\": \"markdown\",
+              \"displayName\": \"Nether Portal Coordinate Scale ${{ steps.get_version.outputs.version }} (NeoForge)\",
+              \"gameVersions\": [$(curl -s -H "X-Api-Token: $CURSEFORGE_TOKEN" "https://minecraft.curseforge.com/api/game/versions" | jq '.[] | select(.name == "${{ steps.get_mc_version.outputs.mc_version }}") | .id')],
+              \"releaseType\": \"release\"
+            }" \
+            -F "file=@${{ steps.find_jars.outputs.neoforge_jar }}"
+
+      - name: Publish to Modrinth
+        if: env.MODRINTH_TOKEN != '' && env.MODRINTH_PROJECT_ID != ''
+        env:
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          MODRINTH_PROJECT_ID: ${{ secrets.MODRINTH_PROJECT_ID }}
+        run: |
+          # Create a temporary file for the JSON payload
+          cat > payload.json << EOF
+          {
+            "name": "Nether Portal Coordinate Scale ${{ steps.get_version.outputs.version }}",
+            "version_number": "${{ steps.get_version.outputs.version }}",
+            "changelog": "${{ steps.changelog.outputs.changelog }}",
+            "dependencies": [],
+            "game_versions": ["${{ steps.get_mc_version.outputs.mc_version }}"],
+            "version_type": "release",
+            "loaders": ["fabric", "neoforge"],
+            "featured": true,
+            "project_id": "$MODRINTH_PROJECT_ID",
+            "file_parts": ["fabric", "neoforge"]
+          }
+          EOF
+
+          # Upload both files in a single request
+          curl -X POST "https://api.modrinth.com/v2/version" \
+            -H "Authorization: $MODRINTH_TOKEN" \
+            -H "Content-Type: multipart/form-data" \
+            -F "data=@payload.json" \
+            -F "fabric=@${{ steps.find_jars.outputs.fabric_jar }}" \
+            -F "neoforge=@${{ steps.find_jars.outputs.neoforge_jar }}"
+
+          rm payload.json
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ${{ steps.find_jars.outputs.fabric_jar }}
+            ${{ steps.find_jars.outputs.neoforge_jar }}
+          body: ${{ steps.changelog.outputs.changelog }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
