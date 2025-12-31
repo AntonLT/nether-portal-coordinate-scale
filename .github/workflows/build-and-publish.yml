@@ -44,10 +44,6 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # Fix #7: Build specific subprojects explicitly
-      - name: Build with Gradle
-        run: ./gradlew clean :fabric:build :neoforge:build
-
       # Fix #5: Use tag version if triggered by tag, otherwise use gradle.properties
       - name: Get version from gradle.properties
         id: get_version
@@ -61,6 +57,10 @@ jobs:
             VERSION=$(grep "^version=" gradle.properties | cut -d'=' -f2)
             echo "version=$VERSION" >> $GITHUB_OUTPUT
           fi
+
+      # Fix #7: Build specific subprojects explicitly with version override
+      - name: Build with Gradle
+        run: ./gradlew clean :fabric:build :neoforge:build -Pversion=${{ steps.get_version.outputs.version }}
 
       - name: Get Minecraft version
         id: get_mc_version
