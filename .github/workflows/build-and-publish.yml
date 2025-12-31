@@ -137,11 +137,11 @@ jobs:
 
           # Build metadata JSON safely using jq
           jq -n \
-            --slurpfile changelog changelog.txt \
+            --rawfile changelog changelog.txt \
             --arg displayName "Nether Portal Coordinate Scale ${{ steps.get_version.outputs.version }} (Fabric)" \
             --argjson gameVersions "[$GV_ID]" \
             '{
-              changelog: ($changelog | join("\n")),
+              changelog: $changelog,
               changelogType: "markdown",
               displayName: $displayName,
               gameVersions: $gameVersions,
@@ -170,11 +170,11 @@ jobs:
 
           # Build metadata JSON safely using jq
           jq -n \
-            --slurpfile changelog changelog.txt \
+            --rawfile changelog changelog.txt \
             --arg displayName "Nether Portal Coordinate Scale ${{ steps.get_version.outputs.version }} (NeoForge)" \
             --argjson gameVersions "[$GV_ID]" \
             '{
-              changelog: ($changelog | join("\n")),
+              changelog: $changelog,
               changelogType: "markdown",
               displayName: $displayName,
               gameVersions: $gameVersions,
@@ -194,7 +194,7 @@ jobs:
         run: |
           # Build JSON payload safely with jq to handle special characters
           jq -n \
-            --slurpfile changelog changelog.txt \
+            --rawfile changelog changelog.txt \
             --arg name "Nether Portal Coordinate Scale ${{ steps.get_version.outputs.version }}" \
             --arg ver "${{ steps.get_version.outputs.version }}" \
             --arg mc "${{ steps.get_mc_version.outputs.mc_version }}" \
@@ -202,7 +202,7 @@ jobs:
             '{
               name: $name,
               version_number: $ver,
-              changelog: ($changelog | join("\n")),
+              changelog: $changelog,
               dependencies: [],
               game_versions: [$mc],
               version_type: "release",
