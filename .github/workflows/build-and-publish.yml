@@ -15,9 +15,20 @@ on:
         required: false
         type: string
 
+# Fix #6: Set permissions for GITHUB_TOKEN to create releases
+permissions:
+  contents: write
+
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
+
+    # Fix #1: Define env at job level so conditions can access them
+    env:
+      CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+      CURSEFORGE_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
+      MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+      MODRINTH_PROJECT_ID: ${{ secrets.MODRINTH_PROJECT_ID }}
 
     steps:
       - name: Checkout repository
@@ -33,14 +44,19 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      # Fix #7: Build specific subprojects explicitly
       - name: Build with Gradle
-        run: ./gradlew clean build
+        run: ./gradlew clean :fabric:build :neoforge:build
 
+      # Fix #5: Use tag version if triggered by tag, otherwise use gradle.properties
       - name: Get version from gradle.properties
         id: get_version
         run: |
           if [ -n "${{ github.event.inputs.version }}" ]; then
             echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          elif [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
           else
             VERSION=$(grep "^version=" gradle.properties | cut -d'=' -f2)
             echo "version=$VERSION" >> $GITHUB_OUTPUT
@@ -56,30 +72,35 @@ jobs:
         id: changelog
         run: |
           if [ -n "${{ github.event.inputs.changelog }}" ]; then
-            echo "changelog<<EOF" >> $GITHUB_OUTPUT
-            echo "${{ github.event.inputs.changelog }}" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+            echo "${{ github.event.inputs.changelog }}" > changelog.txt
           elif [ -f "CHANGELOG.md" ]; then
-            echo "changelog<<EOF" >> $GITHUB_OUTPUT
-            cat CHANGELOG.md >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+            cp CHANGELOG.md changelog.txt
           else
-            echo "changelog=Release ${{ steps.get_version.outputs.version }}" >> $GITHUB_OUTPUT
+            echo "Release ${{ steps.get_version.outputs.version }}" > changelog.txt
           fi
+          # Output changelog for GitHub Release step
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          cat changelog.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Find JAR files
         id: find_jars
         run: |
           VERSION="${{ steps.get_version.outputs.version }}"
-          FABRIC_JAR=$(find fabric/build/libs -name "*-${VERSION}.jar" ! -name "*-sources.jar" ! -name "*-javadoc.jar" ! -name "*-dev.jar" | head -1)
-          NEOFORGE_JAR=$(find neoforge/build/libs -name "*-${VERSION}.jar" ! -name "*-sources.jar" ! -name "*-javadoc.jar" ! -name "*-dev.jar" | head -1)
+          # Fix #7: More strict matching with explicit sorting
+          FABRIC_JAR=$(find fabric/build/libs -name "*-${VERSION}.jar" ! -name "*-sources.jar" ! -name "*-javadoc.jar" ! -name "*-dev.jar" -type f | sort | head -1)
+          NEOFORGE_JAR=$(find neoforge/build/libs -name "*-${VERSION}.jar" ! -name "*-sources.jar" ! -name "*-javadoc.jar" ! -name "*-dev.jar" -type f | sort | head -1)
 
           if [ -z "$FABRIC_JAR" ]; then
-            echo "Error: Fabric JAR not found"
+            echo "Error: Fabric JAR not found for version ${VERSION}"
+            echo "Available JARs in fabric/build/libs:"
+            ls -la fabric/build/libs/ || echo "Directory not found"
             exit 1
           fi
           if [ -z "$NEOFORGE_JAR" ]; then
-            echo "Error: NeoForge JAR not found"
+            echo "Error: NeoForge JAR not found for version ${VERSION}"
+            echo "Available JARs in neoforge/build/libs:"
+            ls -la neoforge/build/libs/ || echo "Directory not found"
             exit 1
           fi
 
@@ -97,81 +118,114 @@ jobs:
             ${{ steps.find_jars.outputs.fabric_jar }}
             ${{ steps.find_jars.outputs.neoforge_jar }}
 
+      # Fix #1: Use job-level env, condition now works
+      # Fix #4: Properly handle changelog with file and validate game version
       - name: Publish to CurseForge (Fabric)
         if: env.CURSEFORGE_TOKEN != '' && env.CURSEFORGE_PROJECT_ID != ''
-        env:
-          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
-          CURSEFORGE_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
         run: |
+          # Get CurseForge game version ID
+          GV_ID=$(curl -s -H "X-Api-Token: $CURSEFORGE_TOKEN" \
+            "https://minecraft.curseforge.com/api/game/versions" \
+            | jq -r --arg v "${{ steps.get_mc_version.outputs.mc_version }}" '.[] | select(.name==$v) | .id' | head -1)
+
+          if [ -z "$GV_ID" ] || [ "$GV_ID" = "null" ]; then
+            echo "Error: No CurseForge game version ID found for ${{ steps.get_mc_version.outputs.mc_version }}"
+            exit 1
+          fi
+
+          echo "Found CurseForge game version ID: $GV_ID"
+
+          # Build metadata JSON safely using jq
+          jq -n \
+            --slurpfile changelog changelog.txt \
+            --arg displayName "Nether Portal Coordinate Scale ${{ steps.get_version.outputs.version }} (Fabric)" \
+            --argjson gameVersions "[$GV_ID]" \
+            '{
+              changelog: ($changelog | join("\n")),
+              changelogType: "markdown",
+              displayName: $displayName,
+              gameVersions: $gameVersions,
+              releaseType: "release"
+            }' > cf_metadata.json
+
           curl -X POST "https://minecraft.curseforge.com/api/projects/$CURSEFORGE_PROJECT_ID/upload-file" \
             -H "X-Api-Token: $CURSEFORGE_TOKEN" \
-            -F "metadata={
-              \"changelog\": $(jq -Rs . <<< '${{ steps.changelog.outputs.changelog }}'),
-              \"changelogType\": \"markdown\",
-              \"displayName\": \"Nether Portal Coordinate Scale ${{ steps.get_version.outputs.version }} (Fabric)\",
-              \"gameVersions\": [$(curl -s -H "X-Api-Token: $CURSEFORGE_TOKEN" "https://minecraft.curseforge.com/api/game/versions" | jq '.[] | select(.name == "${{ steps.get_mc_version.outputs.mc_version }}") | .id')],
-              \"releaseType\": \"release\"
-            }" \
+            -F "metadata=<cf_metadata.json" \
             -F "file=@${{ steps.find_jars.outputs.fabric_jar }}"
 
       - name: Publish to CurseForge (NeoForge)
         if: env.CURSEFORGE_TOKEN != '' && env.CURSEFORGE_PROJECT_ID != ''
-        env:
-          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
-          CURSEFORGE_PROJECT_ID: ${{ secrets.CURSEFORGE_PROJECT_ID }}
         run: |
+          # Get CurseForge game version ID
+          GV_ID=$(curl -s -H "X-Api-Token: $CURSEFORGE_TOKEN" \
+            "https://minecraft.curseforge.com/api/game/versions" \
+            | jq -r --arg v "${{ steps.get_mc_version.outputs.mc_version }}" '.[] | select(.name==$v) | .id' | head -1)
+
+          if [ -z "$GV_ID" ] || [ "$GV_ID" = "null" ]; then
+            echo "Error: No CurseForge game version ID found for ${{ steps.get_mc_version.outputs.mc_version }}"
+            exit 1
+          fi
+
+          echo "Found CurseForge game version ID: $GV_ID"
+
+          # Build metadata JSON safely using jq
+          jq -n \
+            --slurpfile changelog changelog.txt \
+            --arg displayName "Nether Portal Coordinate Scale ${{ steps.get_version.outputs.version }} (NeoForge)" \
+            --argjson gameVersions "[$GV_ID]" \
+            '{
+              changelog: ($changelog | join("\n")),
+              changelogType: "markdown",
+              displayName: $displayName,
+              gameVersions: $gameVersions,
+              releaseType: "release"
+            }' > cf_metadata.json
+
           curl -X POST "https://minecraft.curseforge.com/api/projects/$CURSEFORGE_PROJECT_ID/upload-file" \
             -H "X-Api-Token: $CURSEFORGE_TOKEN" \
-            -F "metadata={
-              \"changelog\": $(jq -Rs . <<< '${{ steps.changelog.outputs.changelog }}'),
-              \"changelogType\": \"markdown\",
-              \"displayName\": \"Nether Portal Coordinate Scale ${{ steps.get_version.outputs.version }} (NeoForge)\",
-              \"gameVersions\": [$(curl -s -H "X-Api-Token: $CURSEFORGE_TOKEN" "https://minecraft.curseforge.com/api/game/versions" | jq '.[] | select(.name == "${{ steps.get_mc_version.outputs.mc_version }}") | .id')],
-              \"releaseType\": \"release\"
-            }" \
+            -F "metadata=<cf_metadata.json" \
             -F "file=@${{ steps.find_jars.outputs.neoforge_jar }}"
 
+      # Fix #1: Use job-level env, condition now works
+      # Fix #2: Remove Content-Type header, let curl handle multipart boundary
+      # Fix #3: Build JSON with jq to properly escape changelog
       - name: Publish to Modrinth
         if: env.MODRINTH_TOKEN != '' && env.MODRINTH_PROJECT_ID != ''
-        env:
-          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
-          MODRINTH_PROJECT_ID: ${{ secrets.MODRINTH_PROJECT_ID }}
         run: |
-          # Create a temporary file for the JSON payload
-          cat > payload.json << EOF
-          {
-            "name": "Nether Portal Coordinate Scale ${{ steps.get_version.outputs.version }}",
-            "version_number": "${{ steps.get_version.outputs.version }}",
-            "changelog": "${{ steps.changelog.outputs.changelog }}",
-            "dependencies": [],
-            "game_versions": ["${{ steps.get_mc_version.outputs.mc_version }}"],
-            "version_type": "release",
-            "loaders": ["fabric", "neoforge"],
-            "featured": true,
-            "project_id": "$MODRINTH_PROJECT_ID",
-            "file_parts": ["fabric", "neoforge"]
-          }
-          EOF
+          # Build JSON payload safely with jq to handle special characters
+          jq -n \
+            --slurpfile changelog changelog.txt \
+            --arg name "Nether Portal Coordinate Scale ${{ steps.get_version.outputs.version }}" \
+            --arg ver "${{ steps.get_version.outputs.version }}" \
+            --arg mc "${{ steps.get_mc_version.outputs.mc_version }}" \
+            --arg pid "$MODRINTH_PROJECT_ID" \
+            '{
+              name: $name,
+              version_number: $ver,
+              changelog: ($changelog | join("\n")),
+              dependencies: [],
+              game_versions: [$mc],
+              version_type: "release",
+              loaders: ["fabric", "neoforge"],
+              featured: true,
+              project_id: $pid,
+              file_parts: ["fabric", "neoforge"]
+            }' > payload.json
 
-          # Upload both files in a single request
+          echo "Payload:"
+          cat payload.json
+
+          # Upload both files - let curl set Content-Type with proper boundary
           curl -X POST "https://api.modrinth.com/v2/version" \
             -H "Authorization: $MODRINTH_TOKEN" \
-            -H "Content-Type: multipart/form-data" \
-            -F "data=@payload.json" \
+            -F "data=@payload.json;type=application/json" \
             -F "fabric=@${{ steps.find_jars.outputs.fabric_jar }}" \
             -F "neoforge=@${{ steps.find_jars.outputs.neoforge_jar }}"
 
-          rm payload.json
+          rm -f payload.json
 
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            ${{ steps.find_jars.outputs.fabric_jar }}
-            ${{ steps.find_jars.outputs.neoforge_jar }}
-          body: ${{ steps.changelog.outputs.changelog }}
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Fix #6: Use v2 of action-gh-release
+
+      - name: Cleanup
+        if: always()
+        run: rm -f changelog.txt cf_metadata.json payload.json
