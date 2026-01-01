@@ -3,7 +3,7 @@ name: Build and Publish
 on:
   push:
     tags:
-      - "v*.*.*" # Triggers on version tags like v1.0.0 (also supports v1.0.1-1.21.5)
+      - "v*" # Triggers on version tags like v1.0.0 (also supports v1.0.1-1.21.5)
   workflow_dispatch: # Allows manual triggering
     inputs:
       version:
