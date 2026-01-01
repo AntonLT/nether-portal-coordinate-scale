@@ -123,23 +123,33 @@ jobs:
       - name: Publish to CurseForge (Fabric)
         if: env.CURSEFORGE_TOKEN != '' && env.CURSEFORGE_PROJECT_ID != ''
         run: |
-          # Get CurseForge game version ID
-          GV_ID=$(curl -s -H "X-Api-Token: $CURSEFORGE_TOKEN" \
+          # Get CurseForge game version IDs
+          MC_ID=$(curl -s -H "X-Api-Token: $CURSEFORGE_TOKEN" \
             "https://minecraft.curseforge.com/api/game/versions" \
             | jq -r --arg v "${{ steps.get_mc_version.outputs.mc_version }}" '.[] | select(.name==$v) | .id' | head -1)
 
-          if [ -z "$GV_ID" ] || [ "$GV_ID" = "null" ]; then
+          FABRIC_ID=$(curl -s -H "X-Api-Token: $CURSEFORGE_TOKEN" \
+            "https://minecraft.curseforge.com/api/game/versions" \
+            | jq -r '.[] | select(.slug=="fabric" or .name=="Fabric") | .id' | head -1)
+
+          if [ -z "$MC_ID" ] || [ "$MC_ID" = "null" ]; then
             echo "Error: No CurseForge game version ID found for ${{ steps.get_mc_version.outputs.mc_version }}"
             exit 1
           fi
 
-          echo "Found CurseForge game version ID: $GV_ID"
+          if [ -z "$FABRIC_ID" ] || [ "$FABRIC_ID" = "null" ]; then
+            echo "Error: No CurseForge Fabric loader ID found"
+            exit 1
+          fi
 
-          # Build metadata JSON safely using jq
+          echo "Found MC version ID: $MC_ID"
+          echo "Found Fabric loader ID: $FABRIC_ID"
+
+          # Build metadata JSON safely using jq with both IDs
           jq -n \
             --rawfile changelog changelog.txt \
             --arg displayName "Nether Portal Coordinate Scale ${{ steps.get_version.outputs.version }} (Fabric)" \
-            --argjson gameVersions "[$GV_ID]" \
+            --argjson gameVersions "[$MC_ID, $FABRIC_ID]" \
             '{
               changelog: $changelog,
               changelogType: "markdown",
@@ -156,23 +166,33 @@ jobs:
       - name: Publish to CurseForge (NeoForge)
         if: env.CURSEFORGE_TOKEN != '' && env.CURSEFORGE_PROJECT_ID != ''
         run: |
-          # Get CurseForge game version ID
-          GV_ID=$(curl -s -H "X-Api-Token: $CURSEFORGE_TOKEN" \
+          # Get CurseForge game version IDs
+          MC_ID=$(curl -s -H "X-Api-Token: $CURSEFORGE_TOKEN" \
             "https://minecraft.curseforge.com/api/game/versions" \
             | jq -r --arg v "${{ steps.get_mc_version.outputs.mc_version }}" '.[] | select(.name==$v) | .id' | head -1)
 
-          if [ -z "$GV_ID" ] || [ "$GV_ID" = "null" ]; then
+          NEOFORGE_ID=$(curl -s -H "X-Api-Token: $CURSEFORGE_TOKEN" \
+            "https://minecraft.curseforge.com/api/game/versions" \
+            | jq -r '.[] | select(.slug=="neoforge" or .name=="NeoForge") | .id' | head -1)
+
+          if [ -z "$MC_ID" ] || [ "$MC_ID" = "null" ]; then
             echo "Error: No CurseForge game version ID found for ${{ steps.get_mc_version.outputs.mc_version }}"
             exit 1
           fi
 
-          echo "Found CurseForge game version ID: $GV_ID"
+          if [ -z "$NEOFORGE_ID" ] || [ "$NEOFORGE_ID" = "null" ]; then
+            echo "Error: No CurseForge NeoForge loader ID found"
+            exit 1
+          fi
 
-          # Build metadata JSON safely using jq
+          echo "Found MC version ID: $MC_ID"
+          echo "Found NeoForge loader ID: $NEOFORGE_ID"
+
+          # Build metadata JSON safely using jq with both IDs
           jq -n \
             --rawfile changelog changelog.txt \
             --arg displayName "Nether Portal Coordinate Scale ${{ steps.get_version.outputs.version }} (NeoForge)" \
-            --argjson gameVersions "[$GV_ID]" \
+            --argjson gameVersions "[$MC_ID, $NEOFORGE_ID]" \
             '{
               changelog: $changelog,
               changelogType: "markdown",
@@ -189,37 +209,70 @@ jobs:
       # Fix #1: Use job-level env, condition now works
       # Fix #2: Remove Content-Type header, let curl handle multipart boundary
       # Fix #3: Build JSON with jq to properly escape changelog
-      - name: Publish to Modrinth
+      - name: Publish to Modrinth (Fabric)
         if: env.MODRINTH_TOKEN != '' && env.MODRINTH_PROJECT_ID != ''
         run: |
           # Build JSON payload safely with jq to handle special characters
           jq -n \
             --rawfile changelog changelog.txt \
-            --arg name "Nether Portal Coordinate Scale ${{ steps.get_version.outputs.version }}" \
+            --arg name "Nether Portal Coordinate Scale ${{ steps.get_version.outputs.version }} (Fabric)" \
             --arg ver "${{ steps.get_version.outputs.version }}" \
             --arg mc "${{ steps.get_mc_version.outputs.mc_version }}" \
             --arg pid "$MODRINTH_PROJECT_ID" \
             '{
               name: $name,
-              version_number: $ver,
+              version_number: ($ver + "-fabric"),
               changelog: $changelog,
               dependencies: [],
               game_versions: [$mc],
               version_type: "release",
-              loaders: ["fabric", "neoforge"],
+              loaders: ["fabric"],
               featured: true,
               project_id: $pid,
-              file_parts: ["fabric", "neoforge"]
+              file_parts: ["fabric"]
             }' > payload.json
 
-          echo "Payload:"
+          echo "Fabric Payload:"
           cat payload.json
 
-          # Upload both files - let curl set Content-Type with proper boundary
+          # Upload Fabric file
           curl -X POST "https://api.modrinth.com/v2/version" \
             -H "Authorization: $MODRINTH_TOKEN" \
             -F "data=@payload.json;type=application/json" \
-            -F "fabric=@${{ steps.find_jars.outputs.fabric_jar }}" \
+            -F "fabric=@${{ steps.find_jars.outputs.fabric_jar }}"
+
+          rm -f payload.json
+
+      - name: Publish to Modrinth (NeoForge)
+        if: env.MODRINTH_TOKEN != '' && env.MODRINTH_PROJECT_ID != ''
+        run: |
+          # Build JSON payload safely with jq to handle special characters
+          jq -n \
+            --rawfile changelog changelog.txt \
+            --arg name "Nether Portal Coordinate Scale ${{ steps.get_version.outputs.version }} (NeoForge)" \
+            --arg ver "${{ steps.get_version.outputs.version }}" \
+            --arg mc "${{ steps.get_mc_version.outputs.mc_version }}" \
+            --arg pid "$MODRINTH_PROJECT_ID" \
+            '{
+              name: $name,
+              version_number: ($ver + "-neoforge"),
+              changelog: $changelog,
+              dependencies: [],
+              game_versions: [$mc],
+              version_type: "release",
+              loaders: ["neoforge"],
+              featured: true,
+              project_id: $pid,
+              file_parts: ["neoforge"]
+            }' > payload.json
+
+          echo "NeoForge Payload:"
+          cat payload.json
+
+          # Upload NeoForge file
+          curl -X POST "https://api.modrinth.com/v2/version" \
+            -H "Authorization: $MODRINTH_TOKEN" \
+            -F "data=@payload.json;type=application/json" \
             -F "neoforge=@${{ steps.find_jars.outputs.neoforge_jar }}"
 
           rm -f payload.json
