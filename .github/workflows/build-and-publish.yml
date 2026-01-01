@@ -111,6 +111,7 @@ jobs:
           FABRIC_JAR=""
           NEOFORGE_JAR=""
           FORGE_JAR=""
+          ROOT_JAR=""
 
           if [ -d "fabric/build/libs" ]; then
             FABRIC_JAR=$(find fabric/build/libs -name "*-${VERSION}.jar" \
@@ -125,11 +126,20 @@ jobs:
               ! -name "*-sources.jar" ! -name "*-javadoc.jar" ! -name "*-dev.jar" -type f | sort | head -1)
           fi
 
+          # Fallback: check root build/libs for single-loader branches (e.g., 1.20.6-forge)
           if [ -z "$FABRIC_JAR" ] && [ -z "$NEOFORGE_JAR" ] && [ -z "$FORGE_JAR" ]; then
+            if [ -d "build/libs" ]; then
+              ROOT_JAR=$(find build/libs -name "*-${VERSION}.jar" \
+                ! -name "*-sources.jar" ! -name "*-javadoc.jar" ! -name "*-dev.jar" -type f | sort | head -1)
+            fi
+          fi
+
+          if [ -z "$FABRIC_JAR" ] && [ -z "$NEOFORGE_JAR" ] && [ -z "$FORGE_JAR" ] && [ -z "$ROOT_JAR" ]; then
             echo "Error: No loader JARs found for version ${VERSION}"
             echo "fabric/build/libs:"; ls -la fabric/build/libs/ || true
             echo "neoforge/build/libs:"; ls -la neoforge/build/libs/ || true
             echo "forge/build/libs:"; ls -la forge/build/libs/ || true
+            echo "build/libs:"; ls -la build/libs/ || true
             exit 1
           fi
 
@@ -152,6 +162,11 @@ jobs:
           if [ -n "$FORGE_JAR" ]; then
             FORGE_OUT="dist/netherportalcoordinatescale-forge-${MC_VERSION}-${VERSION}.jar"
             cp "$FORGE_JAR" "$FORGE_OUT"
+          fi
+          # Fallback: use root JAR as Forge output for single-loader branches
+          if [ -n "$ROOT_JAR" ]; then
+            FORGE_OUT="dist/netherportalcoordinatescale-forge-${MC_VERSION}-${VERSION}.jar"
+            cp "$ROOT_JAR" "$FORGE_OUT"
           fi
 
           echo "fabric_jar=$FABRIC_OUT" >> $GITHUB_OUTPUT
