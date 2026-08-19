@@ -45,7 +45,7 @@ def verify_source(props: dict[str, str]) -> list[str]:
         fail(f"Expected version 1.0.2, found {props.get('version')!r}")
 
     fabric_config = (ROOT / "fabric/src/main/java/com/example/examplemod/config/Config.java").read_text(encoding="utf-8")
-    for token in ("JsonParseException", "Double.isFinite", "MIN_SCALE", "MAX_SCALE"):
+    for token in ("JsonParseException", "NumberFormatException", "Double.isFinite", "MIN_SCALE", "MAX_SCALE"):
         if token not in fabric_config:
             fail(f"Fabric config is missing validation token {token}")
 
