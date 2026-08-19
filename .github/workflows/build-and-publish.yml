@@ -96,4 +96,3 @@ jobs:
           github-name: Nether Portal Coordinate Scale 1.0.1 for Minecraft 26.1.2
           github-token: ${{ secrets.GITHUB_TOKEN }}
           fail-mode: fail
-
