@@ -32,7 +32,7 @@ public class Config {
             try {
                 Config loaded = GSON.fromJson(Files.readString(CONFIG_PATH), Config.class);
                 instance = loaded == null ? new Config() : loaded;
-            } catch (IOException | JsonParseException exception) {
+            } catch (IOException | JsonParseException | NumberFormatException exception) {
                 instance = new Config();
             }
         } else {
