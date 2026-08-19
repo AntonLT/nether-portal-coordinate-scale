@@ -1,6 +1,6 @@
 {
     "schemaVersion": 1,
-    "id": "mod_id",
+    "id": "netherportalcoordinatescale",
     "version": "${version}",
     "name": "${mod_name}",
     "description": "${description}",
@@ -32,4 +32,3 @@
         "another-mod": "*"
     }
 }
-  
