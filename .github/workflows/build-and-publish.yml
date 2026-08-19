@@ -56,7 +56,7 @@ jobs:
         uses: Kira-NT/mc-publish@v3
         with:
           files: fabric/build/libs/netherportalcoordinatescale-fabric-26.2-1.0.1.jar
-          name: Nether Portal Coordinate Scale 1.0.1 for Minecraft 26.2 (Fabric)
+          name: NPCS 1.0.1 26.2 Fabric
           version: 1.0.1-26.2-fabric
           version-type: release
           changelog: Fix configured portal coordinate scaling on clients and dedicated servers.
@@ -79,7 +79,7 @@ jobs:
         uses: Kira-NT/mc-publish@v3
         with:
           files: neoforge/build/libs/netherportalcoordinatescale-neoforge-26.2-1.0.1.jar
-          name: Nether Portal Coordinate Scale 1.0.1 for Minecraft 26.2 (NeoForge)
+          name: NPCS 1.0.1 26.2 NeoForge
           version: 1.0.1-26.2-neoforge
           version-type: release
           changelog: Fix configured portal coordinate scaling on clients and dedicated servers.
