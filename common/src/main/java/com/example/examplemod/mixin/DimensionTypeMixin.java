@@ -1,5 +1,6 @@
 package com.example.examplemod.mixin;
 
+import com.example.examplemod.platform.Services;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -15,8 +16,7 @@ public abstract class DimensionTypeMixin {
     )
     private void injectCoordinateScale(CallbackInfoReturnable<Double> cir) {
         if (((DimensionType)(Object)this).toString().toLowerCase().contains("nether")) {
-//            double scale = PortalConfig.NETHER_SCALE.get();
-            cir.setReturnValue(1.0);
+            cir.setReturnValue(Services.PLATFORM.getConfigScale());
             cir.cancel();
         }
     }
