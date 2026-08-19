@@ -10,7 +10,7 @@ import net.neoforged.fml.config.ModConfig;
 @Mod(Constants.MOD_ID)
 public class ExampleMod {
 
-    public ExampleMod(ModContainer container) {
+    public ExampleMod(IEventBus eventBus, ModContainer container) {
         container.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
 
         // This method is invoked by the NeoForge mod loader when it is ready
