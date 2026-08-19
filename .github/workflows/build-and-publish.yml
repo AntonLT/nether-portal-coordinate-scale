@@ -10,6 +10,11 @@ on:
     branches:
       - 26.1.2-neo/fabric
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Retry publication for v1.0.1-26.1.2
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -19,6 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-java@v5
         with:
@@ -33,6 +40,15 @@ jobs:
         run: |
           if [[ "$GITHUB_REF_NAME" != "v1.0.1-26.1.2" ]]; then
             echo "Unexpected release tag: $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+
+      - name: Validate manual publication retry
+        if: github.event_name == 'workflow_dispatch' && inputs.publish
+        shell: bash
+        run: |
+          if ! git diff --quiet v1.0.1-26.1.2..HEAD -- . ':(exclude).github/workflows/build-and-publish.yml'; then
+            echo "Manual publication is only allowed when the workflow is the sole change since v1.0.1-26.1.2." >&2
             exit 1
           fi
 
@@ -52,11 +68,11 @@ jobs:
             neoforge/build/libs/netherportalcoordinatescale-neoforge-26.1.2-1.0.1.jar
 
       - name: Publish Fabric
-        if: github.ref == 'refs/tags/v1.0.1-26.1.2'
+        if: github.ref == 'refs/tags/v1.0.1-26.1.2' || (github.event_name == 'workflow_dispatch' && inputs.publish)
         uses: Kira-NT/mc-publish@v3
         with:
           files: fabric/build/libs/netherportalcoordinatescale-fabric-26.1.2-1.0.1.jar
-          name: Nether Portal Coordinate Scale 1.0.1 for Minecraft 26.1.2 (Fabric)
+          name: NPCS 1.0.1 26.1.2 Fabric
           version: 1.0.1-26.1.2-fabric
           version-type: release
           changelog: Fix configured portal coordinate scaling on clients and dedicated servers.
@@ -67,19 +83,17 @@ jobs:
           environment: client | server
           modrinth-id: ${{ secrets.MODRINTH_PROJECT_ID }}
           modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
-          curseforge-id: ${{ secrets.CURSEFORGE_PROJECT_ID }}
-          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
           github-tag: v1.0.1-26.1.2
           github-name: Nether Portal Coordinate Scale 1.0.1 for Minecraft 26.1.2
           github-token: ${{ secrets.GITHUB_TOKEN }}
           fail-mode: fail
 
       - name: Publish NeoForge
-        if: github.ref == 'refs/tags/v1.0.1-26.1.2'
+        if: github.ref == 'refs/tags/v1.0.1-26.1.2' || (github.event_name == 'workflow_dispatch' && inputs.publish)
         uses: Kira-NT/mc-publish@v3
         with:
           files: neoforge/build/libs/netherportalcoordinatescale-neoforge-26.1.2-1.0.1.jar
-          name: Nether Portal Coordinate Scale 1.0.1 for Minecraft 26.1.2 (NeoForge)
+          name: NPCS 1.0.1 26.1.2 NeoForge
           version: 1.0.1-26.1.2-neoforge
           version-type: release
           changelog: Fix configured portal coordinate scaling on clients and dedicated servers.
