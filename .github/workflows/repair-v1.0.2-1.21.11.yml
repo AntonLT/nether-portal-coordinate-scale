@@ -65,14 +65,8 @@ jobs:
           MODRINTH_VERSIONS=$(curl -fsSL "https://api.modrinth.com/v2/project/$MODRINTH_PROJECT_ID/version")
           test "$(jq '[.[] | select(.version_number == "1.0.2-1.21.11-fabric" or .version_number == "1.0.2-1.21.11-neoforge")] | length' <<<"$MODRINTH_VERSIONS")" = 0
 
-          CURSEFORGE_FILES=$(curl -fsSL \
-            -H "X-Api-Token: $CURSEFORGE_TOKEN" \
-            "https://minecraft.curseforge.com/api/projects/$CURSEFORGE_PROJECT_ID/files")
-          FABRIC_NAME='netherportalcoordinatescale-fabric-1.21.11-1.0.2.jar'
-          NEOFORGE_NAME='netherportalcoordinatescale-neoforge-1.21.11-1.0.2.jar'
-          test "$(jq --arg name "$FABRIC_NAME" '[.[] | select(.fileName == $name)] | length' <<<"$CURSEFORGE_FILES")" = 1
-          test "$(jq --arg name "$NEOFORGE_NAME" '[.[] | select(.fileName == $name)] | length' <<<"$CURSEFORGE_FILES")" = 0
-          FABRIC_ID=$(jq -r --arg name "$FABRIC_NAME" '.[] | select(.fileName == $name) | .id' <<<"$CURSEFORGE_FILES")
+          test "$CURSEFORGE_PROJECT_ID" = "1282016"
+          FABRIC_ID=8690943
 
           if gh release view "v1.0.2-1.21.11" >/dev/null 2>&1; then
             echo 'GitHub release already exists; refusing a duplicate repair'

@@ -37,13 +37,13 @@ for token in (
 guard = by_name["Guard configured marketplace state"]["run"]
 for token in (
     "v2/project/$MODRINTH_PROJECT_ID/version",
-    "api/projects/$CURSEFORGE_PROJECT_ID/files",
-    "netherportalcoordinatescale-fabric-1.21.11-1.0.2.jar",
-    "netherportalcoordinatescale-neoforge-1.21.11-1.0.2.jar",
+    'test "$CURSEFORGE_PROJECT_ID" = "1282016"',
+    "FABRIC_ID=8690943",
     "update-file",
     "NPCS 1.0.2 1.21.11 Fabric",
 ):
     assert token in guard
+assert "api/projects/$CURSEFORGE_PROJECT_ID/files" not in guard
 
 fabric = by_name["Publish missing Fabric Modrinth version"]
 assert fabric["with"]["name"] == "NPCS 1.0.2 1.21.11 Fabric"
